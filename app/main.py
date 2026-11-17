@@ -1,27 +1,34 @@
-"""FastAPI Application entrypoint for MAAYA."""
+"""Starlette Application entrypoint for MAAYA."""
 
-from fastapi import FastAPI
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 from app.config import settings
 
-app = FastAPI(
-    title=settings.app.app_name,
-    description="Offline-first personal AI companion API",
-    version="0.1.0",
+
+async def health_check(request) -> JSONResponse:
+    """Basic health check endpoint."""
+    return JSONResponse(
+        {
+            "status": "healthy",
+            "app": settings.app.app_name,
+            "environment": settings.app.environment,
+        }
+    )
+
+
+routes = [
+    Route("/health", endpoint=health_check, methods=["GET"]),
+]
+
+app = Starlette(
+    debug=settings.app.debug,
+    routes=routes,
 )
 
 
-@app.get("/health")
-def health_check() -> dict:
-    """Basic health check endpoint."""
-    return {
-        "status": "healthy",
-        "app": settings.app.app_name,
-        "environment": settings.app.environment,
-    }
-
-
 def start() -> None:
-    """Run application via uvicorn bound to local interface."""
+    """Run application via uvicorn bound strictly to the configured local interface."""
     import uvicorn
 
     uvicorn.run(
@@ -34,4 +41,3 @@ def start() -> None:
 
 if __name__ == "__main__":
     start()
-

@@ -42,7 +42,7 @@ MAAYA is engineered specifically to run entirely on mobile hardware without clou
 
 ## Technology Stack
 
-- **Backend:** Python (FastAPI + Uvicorn) bound strictly to `127.0.0.1`.
+- **Backend:** Python (Starlette + Uvicorn) bound strictly to `127.0.0.1`.
 - **Database:** SQLite (embedded, zero-configuration, robust ACID guarantees).
 - **Inference Runtime:** `llama.cpp` (Termux packaged build).
 - **Frontend:** Lightweight HTML5, modern CSS, and minimal vanilla JavaScript (no heavy node build steps or large bundle frameworks).
@@ -61,7 +61,7 @@ maaya/
 ├── config.example.toml    # Reference non-secret configuration
 ├── app/                   # Backend application package
 │   ├── __init__.py
-│   ├── main.py            # FastAPI application entrypoint
+│   ├── main.py            # Starlette application entrypoint
 │   ├── config.py          # Configuration loader
 │   ├── api/               # API route definitions
 │   ├── engine/            # Inference engine adapters (subprocess / HTTP)

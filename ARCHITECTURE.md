@@ -29,7 +29,7 @@ MAAYA is an offline-first personal AI assistant and reflective thinking partner 
 +-------------------------------+-------------------------------+
                                 | HTTP / JSON (127.0.0.1:8000)
 +-------------------------------v-------------------------------+
-|                       FastAPI Backend                         |
+|                       Starlette Backend                       |
 |                                                               |
 |  +--------------------+  +------------------+  +-----------+  |
 |  |     app.api        |  |   app.projects   |  |app.services| |
@@ -58,13 +58,14 @@ MAAYA is an offline-first personal AI assistant and reflective thinking partner 
 ## 3. Module Responsibilities
 
 ### `app.config`
-- Single source of truth for configuration using typed settings (Pydantic / TOML).
+- Single source of truth for configuration using typed settings (Python standard library `dataclasses` and `tomllib`).
 - Loads settings with fallback defaults, allowing overrides via `config.toml` or environment variables without code modification.
+- Avoids Rust or native build toolchains (such as `pydantic-core`), ensuring direct compatibility with Android Termux environments.
 - Never commits secrets or personal paths to version control.
 
 ### `app.api`
-- Exposes RESTful HTTP endpoints for chat, project management, idea logging, memory inspection, and reminders.
-- Implements strict input validation via Pydantic schemas.
+- Exposes RESTful HTTP endpoints for chat, project management, idea logging, memory inspection, and reminders via Starlette routing.
+- Implements request validation using Python standard library dataclasses and types.
 - Binds strictly to `127.0.0.1` to prevent unauthorized network access.
 
 ### `app.engine` (Inference Subsystem)

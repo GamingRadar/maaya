@@ -2,23 +2,27 @@
 
 Reads configuration from config.toml (if present) or environment variables,
 falling back to default parameters suitable for the Snapdragon 710 target device.
+
+Uses Python standard library dataclasses and tomllib (with tomli fallback for <3.11)
+to avoid heavyweight C/Rust extensions (such as pydantic-core) on Android / Termux.
 """
 
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
 
-# Try importing tomli (Python < 3.11) or tomllib (Python 3.11+)
+# Use standard library tomllib (Python 3.11+) or tomli fallback (Python 3.10)
 try:
     import tomllib
 except ModuleNotFoundError:
     try:
         import tomli as tomllib  # type: ignore
     except ModuleNotFoundError:
-        tomllib = None  # Fall back to pure defaults if toml library is not yet installed
+        tomllib = None  # type: ignore
 
 
-class AppSettings(BaseModel):
+@dataclass
+class AppSettings:
     app_name: str = "MAAYA"
     environment: str = "development"
     debug: bool = False
@@ -26,11 +30,13 @@ class AppSettings(BaseModel):
     port: int = 8000
 
 
-class StorageSettings(BaseModel):
+@dataclass
+class StorageSettings:
     database_path: str = "data/maaya.db"
 
 
-class InferenceSettings(BaseModel):
+@dataclass
+class InferenceSettings:
     mode: str = "cli"  # "cli" or "server"
     llama_cli_path: str = "llama-cli"
     llama_server_url: str = "http://127.0.0.1:8080"
@@ -42,7 +48,8 @@ class InferenceSettings(BaseModel):
     top_p: float = 0.9
 
 
-class PersonalitySettings(BaseModel):
+@dataclass
+class PersonalitySettings:
     name: str = "MAAYA"
     system_prompt: str = (
         "You are MAAYA, a thoughtful, observant, and supportive personal companion "
@@ -52,29 +59,47 @@ class PersonalitySettings(BaseModel):
     )
 
 
-class Settings(BaseModel):
-    app: AppSettings = Field(default_factory=AppSettings)
-    storage: StorageSettings = Field(default_factory=StorageSettings)
-    inference: InferenceSettings = Field(default_factory=InferenceSettings)
-    personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
+@dataclass
+class Settings:
+    app: AppSettings = field(default_factory=AppSettings)
+    storage: StorageSettings = field(default_factory=StorageSettings)
+    inference: InferenceSettings = field(default_factory=InferenceSettings)
+    personality: PersonalitySettings = field(default_factory=PersonalitySettings)
+
+
+def _filter_dataclass_fields(cls: Any, data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract only keys that match the dataclass fields, ignoring unknown extra keys."""
+    if not isinstance(data, dict):
+        return {}
+    valid_keys = cls.__dataclass_fields__.keys()
+    return {k: v for k, v in data.items() if k in valid_keys}
 
 
 def load_settings(config_path: Optional[Path] = None) -> Settings:
     """Load settings from a TOML configuration file if available, or return defaults."""
     if config_path is None:
-        # Check current working directory or project root
         candidate = Path("config.toml")
         if candidate.is_file():
             config_path = candidate
 
-    if config_path and config_path.is_file() and tomllib is not None:
+    if config_path and Path(config_path).is_file() and tomllib is not None:
         with open(config_path, "rb") as f:
-            data = tomllib.load(f)
-            return Settings(**data)
+            raw_data = tomllib.load(f)
+
+        app_data = _filter_dataclass_fields(AppSettings, raw_data.get("app", {}))
+        storage_data = _filter_dataclass_fields(StorageSettings, raw_data.get("storage", {}))
+        inference_data = _filter_dataclass_fields(InferenceSettings, raw_data.get("inference", {}))
+        personality_data = _filter_dataclass_fields(PersonalitySettings, raw_data.get("personality", {}))
+
+        return Settings(
+            app=AppSettings(**app_data),
+            storage=StorageSettings(**storage_data),
+            inference=InferenceSettings(**inference_data),
+            personality=PersonalitySettings(**personality_data),
+        )
 
     return Settings()
 
 
 # Global settings instance
 settings = load_settings()
-
