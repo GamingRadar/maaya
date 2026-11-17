@@ -1,0 +1,104 @@
+# MAAYA Architecture Specification
+
+## 1. System Overview & Principles
+
+MAAYA is an offline-first personal AI assistant and reflective thinking partner running natively on an Android device (Realme 3 Pro / Snapdragon 710) via Termux.
+
+### Fundamental Principles
+
+1. **Independent Memory (Decoupled from LLM):**
+   The Language Model (LLM) is an ephemerally stateless reasoning engine, *not* the repository of truth. All persistent state, memory, ideas, projects, and metadata reside in a structured SQLite database.
+2. **Offline-First & Air-Gapped Operation:**
+   The entire application runs locally. The web server binds to `127.0.0.1` by default. No data or telemetry leaves the physical phone.
+3. **Hardware-Conscious Design:**
+   With 6 GB total physical RAM and Snapdragon 710 (Kryo 360 cores), resource efficiency is paramount:
+   - Inference uses Gemma 3 1B IT Q4_K_M (~1 GB memory footprint).
+   - Minimal Python footprint (< 100 MB).
+   - No heavyweight JS single-page app frameworks (React/Next.js/Angular) running on the device.
+4. **User Agency and Privacy Gates:**
+   Emotional reflections and personal memories are never automatically saved or indexed without explicit confirmation. No background profiling or covert surveillance.
+
+---
+
+## 2. High-Level Architecture Diagram
+
+```
++---------------------------------------------------------------+
+|                      User Interface                           |
+|       (Lightweight HTML5 + CSS + Vanilla JS Frontend)         |
++-------------------------------+-------------------------------+
+                                | HTTP / JSON (127.0.0.1:8000)
++-------------------------------v-------------------------------+
+|                       FastAPI Backend                         |
+|                                                               |
+|  +--------------------+  +------------------+  +-----------+  |
+|  |     app.api        |  |   app.projects   |  |app.services| |
+|  | (REST endpoints)   |  | (Vault & Tasks)  |  | (Reminders)| |
+|  +---------+----------+  +--------+---------+  +-----+-----+  |
+|            |                      |                  |        |
+|  +---------v----------------------v------------------v-----+  |
+|  |                    app.memory                           |  |
+|  |     (SQLite Repository & Context Window Assembler)      |  |
+|  +----------------------------+----------------------------+  |
+|                               | Assembled Prompt Context      |
+|  +----------------------------v----------------------------+  |
+|  |                    app.engine                           |  |
+|  |  (Inference Adapter: llama-cli Subprocess / HTTP Server)|  |
++--+----------------------------+-------------------------------+
+                                |
+             +------------------v------------------+
+             |             llama.cpp               |
+             |  (Packaged Termux binary aarch64)   |
+             |   Gemma 3 1B IT Q4_K_M GGUF Model   |
+             +-------------------------------------+
+```
+
+---
+
+## 3. Module Responsibilities
+
+### `app.config`
+- Single source of truth for configuration using typed settings (Pydantic / TOML).
+- Loads settings with fallback defaults, allowing overrides via `config.toml` or environment variables without code modification.
+- Never commits secrets or personal paths to version control.
+
+### `app.api`
+- Exposes RESTful HTTP endpoints for chat, project management, idea logging, memory inspection, and reminders.
+- Implements strict input validation via Pydantic schemas.
+- Binds strictly to `127.0.0.1` to prevent unauthorized network access.
+
+### `app.engine` (Inference Subsystem)
+- Abstracts LLM communication behind a clean interface: `InferenceEngine.generate(prompt, options)`.
+- **Primary Adapter (`CLIAdapter`):** Runs the Termux packaged `llama-cli` executable via Python `asyncio.subprocess`. Highly stable, frees CPU memory immediately after generation.
+- **Secondary Adapter (`ServerAdapter`):** Connects to `llama-server` via HTTP (if available in future runtime updates for persistent KV cache).
+- Handles parameter translation (context length, temperature, top-p, thread limits).
+
+### `app.memory` (Persistence & Knowledge Storage)
+- Encapsulates SQLite operations using standard library `sqlite3` (no heavy ORM overhead on mobile).
+- Separates data domains:
+  1. **Conversations:** Chronological chat logs with message metadata.
+  2. **Long-Term Memory:** User-approved facts, preferences, and personal context.
+  3. **Context Assembler:** Synthesizes system prompt, relevant persistent memories, and recent dialogue history within the target context budget (e.g. 2048 tokens).
+- Provides complete CRUD operations for user inspection, editing, and deletion.
+
+### `app.projects` (Idea Vault & Planning)
+- Manages discrete user projects, goals, decisions, and related tasks.
+- Links project notes and decisions to conversations where they originated.
+- Distinct from broad conversational memory to allow purposeful project reviews.
+
+### `app.services`
+- **Reminders & Scheduler:** Lightweight task scheduling suitable for mobile environments without background process guarantees.
+- **Journal & Reflection:** Secure, user-controlled entries with strict permission boundaries.
+- **Voice / TTS Interface:** Abstraction for dispatching text-to-speech requests to Android native services (e.g. via Termux:API `termux-tts-speak`).
+
+---
+
+## 4. Mobile Execution & Lifecycle Considerations
+
+1. **Android Low Memory Killer (OOM):**
+   Android aggressively terminates background processes when physical memory is pressured. The backend state must be committed atomically to SQLite after every message so no state is lost if the process is terminated.
+2. **Process Management:**
+   Long-running background services on stock Android (Realme UI) may be stopped by battery optimization. A foreground notification or Termux wake-lock (`termux-wake-lock`) should be maintained during active usage sessions.
+3. **Subprocess Concurrency:**
+   The phone's Snapdragon 710 contains 2 performance cores (Gold) and 6 efficiency cores (Silver). CPU thread usage is capped at 4 threads to prevent thermal buildup and allow background system operations to run smoothly.
+

@@ -1,0 +1,37 @@
+# MAAYA Configuration Template (config.example.toml)
+# Copy this file to config.toml to override default settings.
+# config.toml is ignored by git to protect personal data and local device paths.
+
+[app]
+app_name = "MAAYA"
+environment = "development"
+debug = false
+host = "127.0.0.1"
+port = 8000
+
+[storage]
+# Path to SQLite database relative to project root or absolute on Android
+database_path = "data/maaya.db"
+
+[inference]
+# Mode can be "cli" (invoking llama-cli subprocess) or "server" (querying local llama-server via HTTP)
+mode = "cli"
+
+# Path to llama executable in Termux or host environment
+llama_cli_path = "llama-cli"
+llama_server_url = "http://127.0.0.1:8080"
+
+# Path to GGUF model file on device (e.g. ~/MAAYA/models/google_gemma-3-1b-it-Q4_K_M.gguf)
+model_path = "models/google_gemma-3-1b-it-Q4_K_M.gguf"
+
+# Hardware / inference parameters tuned for Snapdragon 710
+threads = 4
+context_size = 2048
+max_tokens = 512
+temperature = 0.7
+top_p = 0.9
+
+[personality]
+name = "MAAYA"
+system_prompt = """You are MAAYA, a thoughtful, observant, and supportive personal companion inspired by the collaborative dynamic between Sherlock Holmes and Dr. John Watson. You listen carefully, remember important ideas, help organize thoughts, and offer balanced, insightful perspectives."""
+
