@@ -3,7 +3,7 @@
 Safely invokes the Termux-packaged llama-cli on Android/ARM64, handling:
 - Subprocess execution without shell=True
 - Process concurrency serialization via asyncio.Lock to protect device RAM
-- Output cleaning (stripping llama.cpp logs, banner, stats, and echoed prompts)
+- Dual-stream (stdout/stderr) output inspection and robust cleaning
 - Comprehensive error handling without leaking filesystem paths or traces
 """
 
@@ -43,34 +43,104 @@ def format_gemma_prompt(system_prompt: str, user_message: str) -> str:
     )
 
 
-def clean_llama_output(raw_stdout: str, prompt: str) -> str:
-    """Strip llama.cpp banners, timing stats, prompt echo, and Gemma turn tokens."""
-    text = raw_stdout
+def extract_assistant_response(raw_text: str, prompt: str = "") -> str:
+    """Extract and sanitize generated assistant response from raw process output.
 
-    # Strip prompt echo if present at start
-    if prompt and text.startswith(prompt):
-        text = text[len(prompt):]
+    Handles both stdout and mixed output cases:
+    - Strips terminal banners, 'Loading model...', and 'available commands' blocks
+    - Strips prompt echo (including full Gemma turns or raw prompt text)
+    - Strips performance lines like '[ Prompt: ... | Generation: ... ]' and 'Exiting...'
+    - Strips llama_print_timings, ggml_, and standard llama.cpp timing logs
+    - Strips Gemma turn delimiters (<start_of_turn>, <end_of_turn>, etc.)
+    - Preserves normal multiline conversational text from the model
+    """
+    if not raw_text:
+        return ""
 
-    # Remove Gemma turn tokens
-    text = text.replace("<start_of_turn>model", "")
-    text = text.replace("<start_of_turn>", "")
-    text = text.replace("<end_of_turn>", "")
+    text = raw_text
 
-    # Strip llama.cpp timing/diagnostic lines (e.g., "llama_print_timings: ...", "load time = ...")
-    lines = []
+    # 1. Remove ANSI escape sequences (e.g., colors, cursor codes)
+    text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", text)
+
+    # 2. If the text contains the interactive banner 'available commands:',
+    # the actual response starts after the initial prompt marker (e.g. '>')
+    # or after the 'available commands:' block.
+    if "available commands:" in text:
+        # Find where 'available commands:' block ends (usually ending with a prompt '>' or empty line)
+        parts = text.split("available commands:", 1)
+        after_banner = parts[1]
+        lines = after_banner.splitlines()
+        start_idx = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # Skip commands like /exit, /regen, /clear, /read, /glob, /image
+            if stripped.startswith("/") or stripped.startswith("stop or exit") or stripped.startswith("regenerate"):
+                continue
+            if stripped.startswith(">"):
+                # If the line starts with '>', strip the leading '>' and start from this line
+                lines[i] = stripped[1:].strip()
+                start_idx = i
+                break
+            if stripped and not stripped.startswith("/"):
+                # Non-command line found
+                start_idx = i
+                break
+        text = "\n".join(lines[start_idx:])
+
+    # 3. Strip prompt echo if present
+    # Check full prompt match
+    if prompt and prompt in text:
+        text = text.split(prompt, 1)[-1]
+    else:
+        # Check if Gemma model tag marker was echoed: '<start_of_turn>model'
+        if "<start_of_turn>model" in text:
+            text = text.split("<start_of_turn>model", 1)[-1]
+
+    # 4. Filter line-by-line for diagnostic headers, timings, and banners
+    cleaned_lines = []
     for line in text.splitlines():
         trimmed = line.strip()
-        # Common llama.cpp diagnostic prefixes
-        if trimmed.startswith("llama_") or trimmed.startswith("ggml_"):
-            continue
-        if re.match(r"^(load|sample|prompt eval|eval|total) time\s*=", trimmed):
-            continue
-        if trimmed.startswith("main: ") or trimmed.startswith("system_info:"):
-            continue
-        lines.append(line)
 
-    cleaned = "\n".join(lines).strip()
-    return cleaned
+        # Skip empty lines at the very beginning of processing
+        if not cleaned_lines and not trimmed:
+            continue
+
+        # Terminal / execution status lines
+        if trimmed == "Exiting..." or trimmed == "Loading model..." or trimmed == ">":
+            continue
+
+        # Performance summary line: e.g. [ Prompt: 10.7 t/s | Generation: 7.1 t/s ]
+        if re.match(r"^\[\s*Prompt:.*?Generation:.*?\]", trimmed):
+            continue
+
+        # Standard llama.cpp / ggml timing and diagnostic prefixes
+        if trimmed.startswith("llama_") or trimmed.startswith("ggml_") or trimmed.startswith("main: ") or trimmed.startswith("srv "):
+            continue
+        if re.match(r"^(load|sample|prompt eval|eval|total)\s*time\s*=", trimmed):
+            continue
+        if trimmed.startswith("system_info:") or trimmed.startswith("sampler seed:"):
+            continue
+
+        # Skip residual command list lines if banner splitting left any
+        if trimmed.startswith("/exit") or trimmed.startswith("/regen") or trimmed.startswith("/clear"):
+            continue
+
+        cleaned_lines.append(line)
+
+    result = "\n".join(cleaned_lines)
+
+    # 5. Clean turn tags
+    result = result.replace("<start_of_turn>model", "")
+    result = result.replace("<start_of_turn>user", "")
+    result = result.replace("<start_of_turn>system", "")
+    result = result.replace("<start_of_turn>", "")
+    result = result.replace("<end_of_turn>", "")
+
+    return result.strip()
+
+
+# Backward compatibility alias
+clean_llama_output = extract_assistant_response
 
 
 class GemmaEngine:
@@ -92,7 +162,6 @@ class GemmaEngine:
         resolved = shutil.which(exe)
         if resolved:
             return resolved
-        # Check direct path if provided
         expanded = os.path.expanduser(exe)
         if os.path.isfile(expanded) and os.access(expanded, os.X_OK):
             return expanded
@@ -118,6 +187,9 @@ class GemmaEngine:
                 user_message,
             )
 
+            # Invocation configuration:
+            # -st (--single-turn) guarantees non-interactive exit after one response
+            # -p passes the formatted prompt
             cmd = [
                 exe_path,
                 "-m", model_path,
@@ -163,21 +235,45 @@ class GemmaEngine:
                     pass
                 raise InferenceTimeoutError("Inference timed out")
 
+            stdout_str = stdout_data.decode("utf-8", errors="replace")
+            stderr_str = stderr_data.decode("utf-8", errors="replace")
+
+            # Diagnostic logging (safe metadata only: returncode and stream lengths)
+            logger.info(
+                "Subprocess finished: returncode=%d, stdout_len=%d, stderr_len=%d",
+                process.returncode,
+                len(stdout_str),
+                len(stderr_str),
+            )
+            # Safe truncated sample logging (up to 80 chars, without logging full user message)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("stdout sample: %r", stdout_str[:80])
+                logger.debug("stderr sample: %r", stderr_str[:80])
+
             # 5. Check exit code
             if process.returncode != 0:
                 logger.error(
-                    "Inference subprocess exited with code %d. Stderr: %s",
+                    "Inference subprocess exited with code %d. Stderr snippet: %s",
                     process.returncode,
-                    stderr_data.decode("utf-8", errors="replace")[:200],
+                    stderr_str[:120].strip(),
                 )
                 raise ProcessExecutionError("Inference process failed")
 
-            # 6. Parse and clean output
-            raw_output = stdout_data.decode("utf-8", errors="replace")
-            cleaned_text = clean_llama_output(raw_output, prompt)
+            # 6. Parse and extract generated assistant response
+            # In standard llama-cli execution, stdout receives the generation.
+            # If stdout is empty due to stream redirection behavior, fallback to checking stderr.
+            cleaned_text = extract_assistant_response(stdout_str, prompt)
+            if not cleaned_text and stderr_str:
+                logger.info("stdout yielded no response; checking stderr channel")
+                cleaned_text = extract_assistant_response(stderr_str, prompt)
 
             if not cleaned_text:
-                logger.warning("Inference completed but output was empty")
+                logger.warning(
+                    "Inference completed (code %d) but extracted text was empty. stdout_len=%d, stderr_len=%d",
+                    process.returncode,
+                    len(stdout_str),
+                    len(stderr_str),
+                )
                 raise EmptyResponseError("Inference returned empty response")
 
             return GenerationResult(

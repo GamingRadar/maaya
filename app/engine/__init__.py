@@ -8,7 +8,13 @@ from app.engine.exceptions import (
     ModelNotFoundError,
     ProcessExecutionError,
 )
-from app.engine.gemma import GemmaEngine, GenerationResult
+from app.engine.gemma import (
+    GemmaEngine,
+    GenerationResult,
+    clean_llama_output,
+    extract_assistant_response,
+    format_gemma_prompt,
+)
 
 __all__ = [
     "GemmaEngine",
@@ -19,4 +25,7 @@ __all__ = [
     "InferenceTimeoutError",
     "ProcessExecutionError",
     "EmptyResponseError",
+    "clean_llama_output",
+    "extract_assistant_response",
+    "format_gemma_prompt",
 ]

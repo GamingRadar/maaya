@@ -19,6 +19,7 @@ from app.engine.gemma import (
     GemmaEngine,
     GenerationResult,
     clean_llama_output,
+    extract_assistant_response,
     format_gemma_prompt,
 )
 from app.main import app
@@ -27,7 +28,7 @@ client = TestClient(app)
 
 
 # ============================================================================
-# Engine Unit Tests (Formatting, Output Cleaning, Subprocess Mocking)
+# Engine Unit Tests (Formatting, Output Cleaning, Real Termux Output Parsing)
 # ============================================================================
 
 def test_format_gemma_prompt():
@@ -50,8 +51,73 @@ def test_clean_llama_output_strips_diagnostics():
         + "total time =     450.00 ms\n"
     )
 
-    cleaned = clean_llama_output(raw_output, prompt)
+    cleaned = extract_assistant_response(raw_output, prompt)
     assert cleaned == "Hello! I am MAAYA."
+
+
+def test_real_termux_output_parsing():
+    """Verify parser extracts response from real Termux llama-cli output with interactive banner and stats."""
+    prompt = (
+        "<start_of_turn>system\n"
+        "You are MAAYA.<end_of_turn>\n"
+        "<start_of_turn>user\n"
+        "Hello! Briefly introduce yourself.<end_of_turn>\n"
+        "<start_of_turn>model\n"
+    )
+
+    # Reconstruct the exact output format reported from the Realme 3 Pro device
+    real_device_output = (
+        "Loading model...\n"
+        "build : b8256\n"
+        "available commands:\n"
+        "  /exit or Ctrl+C     stop or exit\n"
+        "  /regen              regenerate the last response\n"
+        "  /clear              clear the chat history\n"
+        "  /read <file>        add a text file\n"
+        "  /glob <pattern>     add text files using globbing pattern\n"
+        "> "
+        + prompt
+        + "Hello! I'm MAAYA, your thoughtful personal companion inspired by Holmes and Watson. "
+        + "I am here to help you reflect, organize ideas, and think clearly.\n"
+        + "<end_of_turn>\n"
+        + "[ Prompt: 10.7 t/s | Generation: 7.1 t/s ]\n"
+        + "Exiting...\n"
+    )
+
+    cleaned = extract_assistant_response(real_device_output, prompt)
+    expected = (
+        "Hello! I'm MAAYA, your thoughtful personal companion inspired by Holmes and Watson. "
+        "I am here to help you reflect, organize ideas, and think clearly."
+    )
+    assert cleaned == expected
+
+
+def test_multiline_assistant_response_preserved():
+    """Verify multiline response is preserved without losing legitimate paragraphs."""
+    raw = (
+        "Loading model...\n"
+        "> Hello! I am MAAYA.\n\n"
+        "Here are three things I can do:\n"
+        "1. Listen to your thoughts.\n"
+        "2. Help track your projects.\n"
+        "3. Provide reflective insights.\n\n"
+        "How can I help you today?\n"
+        "[ Prompt: 12.0 t/s | Generation: 7.0 t/s ]\n"
+        "Exiting...\n"
+    )
+    cleaned = extract_assistant_response(raw)
+    assert "1. Listen to your thoughts." in cleaned
+    assert "2. Help track your projects." in cleaned
+    assert "3. Provide reflective insights." in cleaned
+    assert "How can I help you today?" in cleaned
+    assert "Exiting..." not in cleaned
+    assert "Prompt:" not in cleaned
+
+
+def test_empty_raw_output():
+    """Verify empty raw output returns empty string."""
+    assert extract_assistant_response("") == ""
+    assert extract_assistant_response("   \n\n  ") == ""
 
 
 @pytest.mark.anyio
@@ -83,7 +149,6 @@ async def test_engine_missing_model():
 @pytest.mark.anyio
 async def test_engine_successful_execution(tmp_path):
     """Verify successful subprocess execution and output extraction."""
-    # Create a dummy model file
     dummy_model = tmp_path / "model.gguf"
     dummy_model.write_text("dummy")
 
@@ -101,7 +166,7 @@ async def test_engine_successful_execution(tmp_path):
     mock_process = AsyncMock()
     mock_process.returncode = 0
     mock_process.communicate.return_value = (
-        b"I am MAAYA, pleased to assist you.\nllama_print_timings: total time = 100ms",
+        b"Loading model...\n[ Prompt: 10 t/s | Generation: 7 t/s ]\nI am MAAYA, pleased to assist you.\nExiting...\n",
         b"",
     )
 
@@ -111,16 +176,38 @@ async def test_engine_successful_execution(tmp_path):
             assert res.text == "I am MAAYA, pleased to assist you."
             assert res.model == "gemma-3-1b"
 
-            # Check that shell=True was NOT used and arguments are safe
             mock_exec.assert_called_once()
             args = mock_exec.call_args[0]
             assert args[0] == "/mock/bin/llama-cli"
             assert "-m" in args
-            assert "-c" in args
-            assert "-n" in args
-            assert "-t" in args
-            assert "-ngl" in args
+            assert "-st" in args
             assert "--no-warmup" in args
+
+
+@pytest.mark.anyio
+async def test_engine_stream_fallback_to_stderr(tmp_path):
+    """Verify engine extracts answer from stderr if stdout was empty due to stream redirection."""
+    dummy_model = tmp_path / "model.gguf"
+    dummy_model.write_text("dummy")
+
+    inf_cfg = InferenceSettings(
+        llama_cli_path="llama-cli",
+        model_path=str(dummy_model),
+    )
+    test_engine = GemmaEngine(inf_cfg, PersonalitySettings())
+
+    mock_process = AsyncMock()
+    mock_process.returncode = 0
+    # stdout empty, stderr contains the output
+    mock_process.communicate.return_value = (
+        b"",
+        b"Loading model...\navailable commands:\n  /exit stop\n> Hello from MAAYA via stderr!\n[ Prompt: 10 t/s | Generation: 7 t/s ]\nExiting...\n",
+    )
+
+    with patch("shutil.which", return_value="/mock/bin/llama-cli"):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            res = await test_engine.generate("Hello")
+            assert res.text == "Hello from MAAYA via stderr!"
 
 
 @pytest.mark.anyio
@@ -171,7 +258,7 @@ async def test_engine_non_zero_exit(tmp_path):
 
 @pytest.mark.anyio
 async def test_engine_empty_response(tmp_path):
-    """Verify engine raises EmptyResponseError if output contains no content."""
+    """Verify engine raises EmptyResponseError if output contains no assistant content."""
     dummy_model = tmp_path / "model.gguf"
     dummy_model.write_text("dummy")
 
@@ -183,7 +270,7 @@ async def test_engine_empty_response(tmp_path):
 
     mock_process = AsyncMock()
     mock_process.returncode = 0
-    mock_process.communicate.return_value = (b"llama_print_timings: total time = 100ms", b"")
+    mock_process.communicate.return_value = (b"Loading model...\n[ Prompt: 10 t/s | Generation: 7 t/s ]\nExiting...\n", b"")
 
     with patch("shutil.which", return_value="/mock/bin/llama-cli"):
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
@@ -220,14 +307,13 @@ async def test_engine_concurrency_serialization(tmp_path):
 
     with patch("shutil.which", return_value="/mock/bin/llama-cli"):
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-            # Run 3 calls concurrently
             results = await asyncio.gather(
                 test_engine.generate("Req 1"),
                 test_engine.generate("Req 2"),
                 test_engine.generate("Req 3"),
             )
             assert len(results) == 3
-            assert max_concurrent_observed == 1  # Strictly serialized!
+            assert max_concurrent_observed == 1
 
 
 # ============================================================================
