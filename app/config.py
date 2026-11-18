@@ -48,7 +48,7 @@ class InferenceSettings:
     threads: int = 2
     context_size: int = 512
     max_tokens: int = 256
-    timeout: float = 60.0
+    timeout: float = 180.0
     temperature: float = 0.7
     top_p: float = 0.9
 

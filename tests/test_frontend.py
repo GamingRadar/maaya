@@ -45,3 +45,10 @@ def test_static_js_served_successfully():
     assert "application/javascript" in response.headers["content-type"] or "text/javascript" in response.headers["content-type"]
     assert "sendMessage" in response.text
     assert "checkServerStatus" in response.text
+    # Verify timeout alignment & error classification logic is present in script
+    assert "210000" in response.text  # 210s client timeout
+    assert "504" in response.text
+    assert "500" in response.text
+    assert "AbortError" in response.text
+    assert "Inference timed out" in response.text
+    assert "Could not reach the local MAAYA service" in response.text

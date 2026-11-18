@@ -30,7 +30,7 @@ model_path = "~/MAAYA/models/google_gemma-3-1b-it-Q4_K_M.gguf"
 threads = 2
 context_size = 512
 max_tokens = 256
-timeout = 60.0
+timeout = 180.0
 temperature = 0.7
 top_p = 0.9
 

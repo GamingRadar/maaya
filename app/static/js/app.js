@@ -155,20 +155,31 @@
     setLoadingState(true);
 
     try {
-      const response = await fetch('/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ message: text }),
-      });
+      // 210-second client timeout ensures browser does not drop connection
+      // before backend's 180-second inference timeout
+      const controller = new AbortController();
+      const clientTimeoutId = setTimeout(() => controller.abort(), 210000);
+
+      let response;
+      try {
+        response = await fetch('/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ message: text }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(clientTimeoutId);
+      }
 
       let data = null;
       try {
         data = await response.json();
       } catch (jsonErr) {
-        // Handle non-JSON server error response
+        // Response was not JSON
       }
 
       if (response.ok && data && data.response) {
@@ -176,19 +187,36 @@
         lastUnsentMessage = '';
         appendMessage('assistant', data.response);
       } else {
-        // Handled server error
-        const errMsg = (data && data.error)
-          ? data.error
-          : 'Unable to get a response from MAAYA. Please verify the model is loaded.';
+        // Server returned an HTTP error (504, 503, 500, 400, etc.)
+        let errMsg = '';
+        if (data && data.error) {
+          errMsg = data.error;
+        } else if (response.status === 504) {
+          errMsg = 'Inference timed out. The model took too long to generate a response.';
+        } else if (response.status === 503) {
+          errMsg = 'Service unavailable. The model file or executable was not found.';
+        } else if (response.status >= 500) {
+          errMsg = 'Internal server error while processing your message.';
+        } else {
+          errMsg = 'Request failed (' + response.status + '). Please try again.';
+        }
         appendMessage('assistant', errMsg, true);
       }
     } catch (netErr) {
-      // Network or connection failure
-      appendMessage(
-        'assistant',
-        'Could not reach the local MAAYA service. Please check that the server is running.',
-        true
-      );
+      // Genuine network failure, abort, or offline connection
+      if (netErr.name === 'AbortError') {
+        appendMessage(
+          'assistant',
+          'Request timed out waiting for the local model. Please try again.',
+          true
+        );
+      } else {
+        appendMessage(
+          'assistant',
+          'Could not reach the local MAAYA service. Please check that the server is running.',
+          true
+        );
+      }
     } finally {
       setLoadingState(false);
       messageInput.focus();

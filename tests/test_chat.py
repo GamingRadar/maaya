@@ -216,7 +216,7 @@ async def test_engine_empty_stdout_with_stderr_warnings_raises_empty_response(tm
 
 @pytest.mark.anyio
 async def test_engine_subprocess_timeout(tmp_path):
-    """Verify engine raises InferenceTimeoutError on subprocess timeout."""
+    """Verify engine raises InferenceTimeoutError on subprocess timeout and cleans up process."""
     dummy_model = tmp_path / "model.gguf"
     dummy_model.write_text("dummy")
 
@@ -236,6 +236,47 @@ async def test_engine_subprocess_timeout(tmp_path):
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
             with pytest.raises(InferenceTimeoutError):
                 await test_engine.generate("Hello")
+
+            # Check that kill and wait were invoked for proper cleanup
+            mock_process.kill.assert_called_once()
+            mock_process.wait.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_engine_lock_recovery_after_timeout(tmp_path):
+    """Verify engine releases the concurrency lock after a timeout so subsequent requests succeed."""
+    dummy_model = tmp_path / "model.gguf"
+    dummy_model.write_text("dummy")
+
+    inf_cfg = InferenceSettings(
+        llama_cli_path="llama-cli",
+        model_path=str(dummy_model),
+        timeout=0.01,
+    )
+    test_engine = GemmaEngine(inf_cfg, PersonalitySettings())
+
+    # 1. First process times out
+    mock_timeout_proc = AsyncMock()
+    mock_timeout_proc.communicate.side_effect = asyncio.TimeoutError()
+    mock_timeout_proc.kill = AsyncMock(return_value=None)
+    mock_timeout_proc.wait = AsyncMock(return_value=None)
+
+    with patch("shutil.which", return_value="/mock/bin/llama-cli"):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_timeout_proc):
+            with pytest.raises(InferenceTimeoutError):
+                await test_engine.generate("Req 1")
+
+    # 2. Lock must be unlocked: subsequent request must succeed
+    assert not test_engine._lock.locked()
+
+    mock_success_proc = AsyncMock()
+    mock_success_proc.returncode = 0
+    mock_success_proc.communicate.return_value = (b"I am MAAYA.\n[ Prompt: 10 t/s | Generation: 7 t/s ]\n", b"")
+
+    with patch("shutil.which", return_value="/mock/bin/llama-cli"):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_success_proc):
+            res = await test_engine.generate("Req 2")
+            assert res.text == "I am MAAYA."
 
 
 @pytest.mark.anyio

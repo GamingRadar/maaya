@@ -24,7 +24,7 @@ def test_default_settings():
     assert settings.inference.threads == 2
     assert settings.inference.context_size == 512
     assert settings.inference.max_tokens == 256
-    assert settings.inference.timeout == 60.0
+    assert settings.inference.timeout == 180.0
     assert settings.app.max_message_length == 4096
     assert "Watson" in settings.personality.system_prompt
 

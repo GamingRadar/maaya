@@ -224,17 +224,23 @@ class GemmaEngine:
                     timeout=self.inference_settings.timeout,
                 )
             except asyncio.TimeoutError:
-                logger.warning("Inference subprocess timed out after %s seconds", self.inference_settings.timeout)
+                logger.warning("Inference subprocess timed out after %s seconds; terminating process", self.inference_settings.timeout)
+                # First attempt SIGKILL / process.kill()
                 try:
                     res = process.kill()
                     if asyncio.iscoroutine(res):
                         await res
-                except Exception:
+                except ProcessLookupError:
                     pass
+                except Exception as e:
+                    logger.debug("Exception while killing timed out process: %s", e)
+
+                # Safely await process cleanup so no orphaned zombie processes remain
                 try:
-                    await process.wait()
-                except Exception:
-                    pass
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except Exception as e:
+                    logger.debug("Exception waiting for timed out process cleanup: %s", e)
+
                 raise InferenceTimeoutError("Inference timed out")
 
             stdout_str = stdout_data.decode("utf-8", errors="replace")
