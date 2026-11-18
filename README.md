@@ -121,6 +121,21 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
+### Accessing the Web Chat Interface
+
+1. Start the server inside Termux:
+   ```bash
+   python -m app.main
+   ```
+2. Open your Android browser (Chrome, Firefox, etc.) on the phone and navigate to:
+   ```text
+   http://127.0.0.1:8000
+   ```
+3. Type a message in the composer at the bottom and press **Enter** or tap the **Send** button.
+   - Message responses will stream through the locally running Gemma 3 1B engine via `llama-cli`.
+   - The typing indicator displays while the model generates its response.
+   - **Note on History:** In Phase 4, chat history is kept within browser memory for the current page session. Multi-turn SQLite persistence belongs to Phase 5.
+
 ### Testing the Chat API via cURL
 
 In another Termux session or local shell:

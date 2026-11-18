@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>MAAYA — AI Companion</title>
+  <meta name="description" content="Offline-first personal AI companion">
+  <meta name="theme-color" content="#121417">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Bar / Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-title">
+          <span class="brand-name">MAAYA</span>
+          <span class="brand-badge">Offline</span>
+        </div>
+        <div class="brand-subtitle">Personal Thinking Partner</div>
+      </div>
+      <div class="header-status" id="headerStatus" title="System status">
+        <span class="status-dot checking" id="statusDot"></span>
+        <span class="status-text" id="statusText">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Main Message Area -->
+    <main class="chat-area" id="chatArea" role="log" aria-live="polite">
+      <!-- Empty State -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon" aria-hidden="true">✦</div>
+        <h2 class="empty-title">Welcome to MAAYA</h2>
+        <p class="empty-description">
+          A thoughtful, observant second perspective. Here to help you reflect, organize ideas, and think clearly.
+        </p>
+        <div class="empty-hints">
+          <button type="button" class="hint-chip" data-prompt="Introduce yourself and tell me how we can work together.">Introduce yourself</button>
+          <button type="button" class="hint-chip" data-prompt="Help me brainstorm ideas for my current project.">Brainstorm project ideas</button>
+          <button type="button" class="hint-chip" data-prompt="I need a second perspective on a problem I'm trying to solve.">Second perspective</button>
+        </div>
+      </div>
+
+      <!-- Messages container -->
+      <div class="messages-list" id="messagesList"></div>
+
+      <!-- Typing Indicator -->
+      <div class="typing-indicator" id="typingIndicator" aria-hidden="true">
+        <div class="message-meta">MAAYA is thinking</div>
+        <div class="typing-bubble">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Composer -->
+    <footer class="composer-container">
+      <form class="composer-form" id="composerForm" autocomplete="off">
+        <div class="input-wrapper">
+          <textarea
+            id="messageInput"
+            class="composer-input"
+            rows="1"
+            placeholder="Talk with MAAYA..."
+            aria-label="Your message to MAAYA"
+            maxlength="4096"
+            required
+          ></textarea>
+        </div>
+        <button
+          type="submit"
+          id="sendButton"
+          class="send-btn"
+          aria-label="Send message"
+          title="Send message (Enter)"
+        >
+          <svg class="send-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+      <div class="composer-footer">
+        <span class="session-notice">Messages are kept for this session only</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
