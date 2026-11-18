@@ -148,7 +148,7 @@ async def test_engine_missing_model():
 
 @pytest.mark.anyio
 async def test_engine_successful_execution(tmp_path):
-    """Verify successful subprocess execution and output extraction."""
+    """Verify successful subprocess execution and output extraction from stdout."""
     dummy_model = tmp_path / "model.gguf"
     dummy_model.write_text("dummy")
 
@@ -165,9 +165,10 @@ async def test_engine_successful_execution(tmp_path):
 
     mock_process = AsyncMock()
     mock_process.returncode = 0
+    # stdout contains the response (with --simple-io), stderr contains GPU/backend warnings
     mock_process.communicate.return_value = (
         b"Loading model...\n[ Prompt: 10 t/s | Generation: 7 t/s ]\nI am MAAYA, pleased to assist you.\nExiting...\n",
-        b"",
+        b"ggml_vulkan: GPU not found, falling back to CPU\nwarning: sdm710 no Vulkan compute device",
     )
 
     with patch("shutil.which", return_value="/mock/bin/llama-cli"):
@@ -181,12 +182,15 @@ async def test_engine_successful_execution(tmp_path):
             assert args[0] == "/mock/bin/llama-cli"
             assert "-m" in args
             assert "-st" in args
+            assert "--simple-io" in args
+            assert "-ngl" in args
+            assert "0" in args
             assert "--no-warmup" in args
 
 
 @pytest.mark.anyio
-async def test_engine_stream_fallback_to_stderr(tmp_path):
-    """Verify engine extracts answer from stderr if stdout was empty due to stream redirection."""
+async def test_engine_empty_stdout_with_stderr_warnings_raises_empty_response(tmp_path):
+    """Verify that empty stdout raises EmptyResponseError even if stderr contains warnings/diagnostics."""
     dummy_model = tmp_path / "model.gguf"
     dummy_model.write_text("dummy")
 
@@ -198,16 +202,16 @@ async def test_engine_stream_fallback_to_stderr(tmp_path):
 
     mock_process = AsyncMock()
     mock_process.returncode = 0
-    # stdout empty, stderr contains the output
+    # stdout is empty, stderr has GPU warnings (like in Test 1 on device)
     mock_process.communicate.return_value = (
         b"",
-        b"Loading model...\navailable commands:\n  /exit stop\n> Hello from MAAYA via stderr!\n[ Prompt: 10 t/s | Generation: 7 t/s ]\nExiting...\n",
+        b"ggml_vulkan: GPU not found\nwarning: no device found\n",
     )
 
     with patch("shutil.which", return_value="/mock/bin/llama-cli"):
         with patch("asyncio.create_subprocess_exec", return_value=mock_process):
-            res = await test_engine.generate("Hello")
-            assert res.text == "Hello from MAAYA via stderr!"
+            with pytest.raises(EmptyResponseError):
+                await test_engine.generate("Hello")
 
 
 @pytest.mark.anyio

@@ -189,6 +189,7 @@ class GemmaEngine:
 
             # Invocation configuration:
             # -st (--single-turn) guarantees non-interactive exit after one response
+            # --simple-io forces basic I/O so stdout stream is flushed and captured by pipes
             # -p passes the formatted prompt
             cmd = [
                 exe_path,
@@ -199,6 +200,7 @@ class GemmaEngine:
                 "-ngl", "0",
                 "--no-warmup",
                 "-st",
+                "--simple-io",
                 "-p", prompt,
             ]
 
@@ -259,17 +261,14 @@ class GemmaEngine:
                 )
                 raise ProcessExecutionError("Inference process failed")
 
-            # 6. Parse and extract generated assistant response
-            # In standard llama-cli execution, stdout receives the generation.
-            # If stdout is empty due to stream redirection behavior, fallback to checking stderr.
+            # 6. Parse and extract generated assistant response strictly from stdout.
+            # In llama-cli with --simple-io, stdout receives generated assistant text,
+            # while stderr contains system logs and GPU warnings. Never treat stderr as response.
             cleaned_text = extract_assistant_response(stdout_str, prompt)
-            if not cleaned_text and stderr_str:
-                logger.info("stdout yielded no response; checking stderr channel")
-                cleaned_text = extract_assistant_response(stderr_str, prompt)
 
             if not cleaned_text:
                 logger.warning(
-                    "Inference completed (code %d) but extracted text was empty. stdout_len=%d, stderr_len=%d",
+                    "Inference completed (code %d) but extracted text from stdout was empty. stdout_len=%d, stderr_len=%d",
                     process.returncode,
                     len(stdout_str),
                     len(stderr_str),
