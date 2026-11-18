@@ -64,14 +64,17 @@ MAAYA is an offline-first personal AI assistant and reflective thinking partner 
 - Never commits secrets or personal paths to version control.
 
 ### `app.api`
-- Exposes RESTful HTTP endpoints for chat, project management, idea logging, memory inspection, and reminders via Starlette routing.
+- Exposes RESTful HTTP endpoints for chat (`POST /chat`), health checks (`GET /health`), project management, and memory inspection via Starlette routing.
 - Implements request validation using Python standard library dataclasses and types.
 - Binds strictly to `127.0.0.1` to prevent unauthorized network access.
+- Handles malformed JSON, empty messages, and payload size bounds cleanly without leaking internal traces.
 
 ### `app.engine` (Inference Subsystem)
-- Abstracts LLM communication behind a clean interface: `InferenceEngine.generate(prompt, options)`.
-- **Primary Adapter (`CLIAdapter`):** Runs the Termux packaged `llama-cli` executable via Python `asyncio.subprocess`. Highly stable, frees CPU memory immediately after generation.
-- **Secondary Adapter (`ServerAdapter`):** Connects to `llama-server` via HTTP (if available in future runtime updates for persistent KV cache).
+- Abstracts LLM communication behind a clean interface: `GemmaEngine.generate(user_message)`.
+- **Primary Adapter (`GemmaEngine`):** Executes the Termux-packaged `llama-cli` executable via asynchronous subprocess (`asyncio.create_subprocess_exec`) without `shell=True`.
+- **Concurrency Serialization:** Enforces strict single-process execution using `asyncio.Lock` to ensure multiple concurrent requests cannot exhaust the phone's RAM.
+- **Output Sanitization:** Strips llama.cpp banners, timing stats, echoed prompts, and Gemma turn tokens `<start_of_turn>` / `<end_of_turn>`.
+- **Fault Tolerance:** Robust handling of timeouts, missing binaries, missing models, non-zero exits, and empty responses.
 - Handles parameter translation (context length, temperature, top-p, thread limits).
 
 ### `app.memory` (Persistence & Knowledge Storage)

@@ -1,5 +1,22 @@
-"""Inference Engine package for MAAYA.
+"""Inference Engine package for MAAYA."""
 
-Provides decoupled adapters for running local LLM inference via llama.cpp.
-"""
+from app.engine.exceptions import (
+    EmptyResponseError,
+    ExecutableNotFoundError,
+    InferenceError,
+    InferenceTimeoutError,
+    ModelNotFoundError,
+    ProcessExecutionError,
+)
+from app.engine.gemma import GemmaEngine, GenerationResult
 
+__all__ = [
+    "GemmaEngine",
+    "GenerationResult",
+    "InferenceError",
+    "ModelNotFoundError",
+    "ExecutableNotFoundError",
+    "InferenceTimeoutError",
+    "ProcessExecutionError",
+    "EmptyResponseError",
+]

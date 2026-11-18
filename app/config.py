@@ -8,6 +8,7 @@ to avoid heavyweight C/Rust extensions (such as pydantic-core) on Android / Term
 """
 
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -28,6 +29,7 @@ class AppSettings:
     debug: bool = False
     host: str = "127.0.0.1"
     port: int = 8000
+    max_message_length: int = 4096
 
 
 @dataclass
@@ -40,10 +42,13 @@ class InferenceSettings:
     mode: str = "cli"  # "cli" or "server"
     llama_cli_path: str = "llama-cli"
     llama_server_url: str = "http://127.0.0.1:8080"
-    model_path: str = "models/google_gemma-3-1b-it-Q4_K_M.gguf"
-    threads: int = 4
-    context_size: int = 2048
-    max_tokens: int = 512
+    model_name: str = "gemma-3-1b"
+    # Default model path pointing to target device storage layout (~/MAAYA/models/)
+    model_path: str = os.path.expanduser("~/MAAYA/models/google_gemma-3-1b-it-Q4_K_M.gguf")
+    threads: int = 2
+    context_size: int = 512
+    max_tokens: int = 256
+    timeout: float = 60.0
     temperature: float = 0.7
     top_p: float = 0.9
 

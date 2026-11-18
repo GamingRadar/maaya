@@ -3,6 +3,7 @@
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from app.api.chat import chat_handler
 from app.config import settings
 
 
@@ -19,6 +20,7 @@ async def health_check(request) -> JSONResponse:
 
 routes = [
     Route("/health", endpoint=health_check, methods=["GET"]),
+    Route("/chat", endpoint=chat_handler, methods=["POST"]),
 ]
 
 app = Starlette(

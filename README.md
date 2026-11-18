@@ -121,3 +121,17 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
+### Testing the Chat API via cURL
+
+In another Termux session or local shell:
+
+```bash
+# Health check
+curl -X GET http://127.0.0.1:8000/health
+
+# Chat request
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello MAAYA, introduce yourself briefly."}'
+```
+
