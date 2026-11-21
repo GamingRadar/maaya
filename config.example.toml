@@ -13,6 +13,8 @@ max_message_length = 4096
 [storage]
 # Path to SQLite database relative to project root or absolute on Android
 database_path = "data/maaya.db"
+# Maximum previous message turns to include in LLM context
+max_history_turns = 10
 
 [inference]
 # Mode can be "cli" (invoking llama-cli subprocess) or "server" (querying local llama-server via HTTP)

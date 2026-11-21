@@ -131,10 +131,28 @@ python -m app.main
    ```text
    http://127.0.0.1:8000
    ```
-3. Type a message in the composer at the bottom and press **Enter** or tap the **Send** button.
-   - Message responses will stream through the locally running Gemma 3 1B engine via `llama-cli`.
-   - The typing indicator displays while the model generates its response.
-   - **Note on History:** In Phase 4, chat history is kept within browser memory for the current page session. Multi-turn SQLite persistence belongs to Phase 5.
+3. **Conversations and Persistence (Phase 5):**
+   - Click the hamburger menu icon (top left) to open the **Conversations Drawer**.
+   - Create new conversations or switch between previous chats.
+   - All conversations, user messages, and model responses are stored locally in SQLite (`data/maaya.db`).
+   - Conversations survive browser reloads, server restarts, and phone reboots.
+   - Gemma 3 1B automatically receives previous conversation turns (up to the configured `max_history_turns`) for multi-turn dialogue context.
+   - Delete conversations deliberately with the trash icon (includes confirmation).
+
+### Database Management & Backup
+
+- **Database Location:** `data/maaya.db` (and SQLite WAL files `data/maaya.db-wal`, `data/maaya.db-shm`).
+- **Backup:**
+  ```bash
+  # Safe backup using SQLite .backup or file copy when server is idle
+  mkdir -p backups
+  sqlite3 data/maaya.db ".backup 'backups/maaya_backup_$(date +%Y%m%d_%H%M%S).db'"
+  ```
+- **Restore:**
+  ```bash
+  # Stop the server, then restore:
+  cp backups/your_backup.db data/maaya.db
+  ```
 
 ### Testing the Chat API via cURL
 
@@ -144,9 +162,24 @@ In another Termux session or local shell:
 # Health check
 curl -X GET http://127.0.0.1:8000/health
 
-# Chat request
+# Create a conversation
+curl -X POST http://127.0.0.1:8000/conversations \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test Chat"}'
+# Response: {"id": "<conv_id>", "title": "Test Chat", ...}
+
+# List conversations
+curl -X GET http://127.0.0.1:8000/conversations
+
+# Send a message into a conversation (with history context)
 curl -X POST http://127.0.0.1:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello MAAYA, introduce yourself briefly."}'
+  -d '{"message": "Hello MAAYA, introduce yourself briefly.", "conversation_id": "<conv_id>"}'
+
+# Retrieve conversation history
+curl -X GET http://127.0.0.1:8000/conversations/<conv_id>
+
+# Delete a conversation
+curl -X DELETE http://127.0.0.1:8000/conversations/<conv_id>
 ```
 

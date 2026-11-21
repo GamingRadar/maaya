@@ -12,18 +12,61 @@
   <div class="app-container">
     <!-- Top Bar / Header -->
     <header class="app-header">
-      <div class="header-brand">
-        <div class="brand-title">
-          <span class="brand-name">MAAYA</span>
-          <span class="brand-badge">Offline</span>
+      <div class="header-left">
+        <button type="button" class="icon-btn" id="historyToggleBtn" aria-label="Open conversation history" title="Conversation history">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="header-brand">
+          <div class="brand-title">
+            <span class="brand-name">MAAYA</span>
+            <span class="brand-badge">Offline</span>
+          </div>
+          <div class="brand-subtitle" id="activeConvTitle">Personal Thinking Partner</div>
         </div>
-        <div class="brand-subtitle">Personal Thinking Partner</div>
       </div>
-      <div class="header-status" id="headerStatus" title="System status">
-        <span class="status-dot checking" id="statusDot"></span>
-        <span class="status-text" id="statusText">Connecting...</span>
+      <div class="header-right">
+        <button type="button" class="icon-btn new-chat-btn" id="newChatBtn" aria-label="Start new conversation" title="New conversation">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <div class="header-status" id="headerStatus" title="System status">
+          <span class="status-dot checking" id="statusDot"></span>
+          <span class="status-text" id="statusText">Connecting...</span>
+        </div>
       </div>
     </header>
+
+    <!-- Slide-out Conversations Drawer Backdrop & Panel -->
+    <div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true"></div>
+    <aside class="conversations-drawer" id="conversationsDrawer" aria-label="Previous conversations" aria-hidden="true">
+      <div class="drawer-header">
+        <div class="drawer-title">Conversations</div>
+        <button type="button" class="icon-btn" id="closeDrawerBtn" aria-label="Close conversation history">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="drawer-action">
+        <button type="button" class="drawer-new-btn" id="drawerNewChatBtn">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New Conversation</span>
+        </button>
+      </div>
+      <div class="conversations-list" id="conversationsList" role="list">
+        <!-- Rendered conversation items -->
+      </div>
+    </aside>
 
     <!-- Main Message Area -->
     <main class="chat-area" id="chatArea" role="log" aria-live="polite">
@@ -83,7 +126,7 @@
         </button>
       </form>
       <div class="composer-footer">
-        <span class="session-notice">Messages are kept for this session only</span>
+        <span class="session-notice">Conversations saved locally in SQLite</span>
       </div>
     </footer>
   </div>

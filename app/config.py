@@ -35,6 +35,7 @@ class AppSettings:
 @dataclass
 class StorageSettings:
     database_path: str = "data/maaya.db"
+    max_history_turns: int = 10  # Maximum previous message turns to include in LLM context
 
 
 @dataclass

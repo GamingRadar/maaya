@@ -17,7 +17,7 @@ def test_index_page_returns_html_and_status_200():
 
 
 def test_index_page_references_required_assets():
-    """Verify index HTML references the static stylesheet and script."""
+    """Verify index HTML references the static stylesheet and script and contains Phase 5 elements."""
     response = client.get("/")
     assert response.status_code == 200
     assert 'href="/static/css/style.css"' in response.text
@@ -27,6 +27,9 @@ def test_index_page_references_required_assets():
     assert 'id="sendButton"' in response.text
     assert 'id="typingIndicator"' in response.text
     assert 'id="statusDot"' in response.text
+    assert 'id="conversationsDrawer"' in response.text
+    assert 'id="newChatBtn"' in response.text
+    assert 'id="historyToggleBtn"' in response.text
 
 
 def test_static_css_served_successfully():

@@ -34,13 +34,34 @@ class GenerationResult:
     model: str
 
 
-def format_gemma_prompt(system_prompt: str, user_message: str) -> str:
-    """Format input using Gemma turn markers (<start_of_turn>)."""
-    return (
+def format_gemma_prompt(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list] = None,
+) -> str:
+    """Format input using Gemma turn markers (<start_of_turn>).
+
+    Supports optional conversation history: a list of dicts/objects with 'role' ('user'|'assistant')
+    and 'content' strings, presented chronologically.
+    """
+    prompt_parts = [
         f"<start_of_turn>system\n{system_prompt.strip()}<end_of_turn>\n"
-        f"<start_of_turn>user\n{user_message.strip()}<end_of_turn>\n"
-        f"<start_of_turn>model\n"
-    )
+    ]
+
+    if history:
+        for msg in history:
+            role = msg["role"] if isinstance(msg, dict) else getattr(msg, "role", "user")
+            content = msg["content"] if isinstance(msg, dict) else getattr(msg, "content", "")
+            # Map role to Gemma turn names: 'user' or 'model' (for assistant)
+            gemma_role = "model" if role == "assistant" else "user"
+            prompt_parts.append(
+                f"<start_of_turn>{gemma_role}\n{content.strip()}<end_of_turn>\n"
+            )
+
+    # Current user message and opening turn for model response
+    prompt_parts.append(f"<start_of_turn>user\n{user_message.strip()}<end_of_turn>\n")
+    prompt_parts.append("<start_of_turn>model\n")
+    return "".join(prompt_parts)
 
 
 def extract_assistant_response(raw_text: str, prompt: str = "") -> str:
@@ -174,7 +195,7 @@ class GemmaEngine:
             raise ModelNotFoundError("Model file not found")
         return path
 
-    async def generate(self, user_message: str) -> GenerationResult:
+    async def generate(self, user_message: str, history: Optional[list] = None) -> GenerationResult:
         """Execute inference subprocess for a user message, protected by concurrency lock."""
         async with self._lock:
             # 1. Validate environment
@@ -185,6 +206,7 @@ class GemmaEngine:
             prompt = format_gemma_prompt(
                 self.personality_settings.system_prompt,
                 user_message,
+                history=history,
             )
 
             # Invocation configuration:

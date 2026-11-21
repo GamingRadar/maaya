@@ -7,6 +7,12 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from app.api.chat import chat_handler
+from app.api.conversations import (
+    create_conversation_handler,
+    delete_conversation_handler,
+    get_conversation_handler,
+    list_conversations_handler,
+)
 from app.config import settings
 
 # Base directory paths
@@ -37,6 +43,10 @@ routes = [
     Route("/", endpoint=index_page, methods=["GET"]),
     Route("/health", endpoint=health_check, methods=["GET"]),
     Route("/chat", endpoint=chat_handler, methods=["POST"]),
+    Route("/conversations", endpoint=create_conversation_handler, methods=["POST"]),
+    Route("/conversations", endpoint=list_conversations_handler, methods=["GET"]),
+    Route("/conversations/{conversation_id}", endpoint=get_conversation_handler, methods=["GET"]),
+    Route("/conversations/{conversation_id}", endpoint=delete_conversation_handler, methods=["DELETE"]),
     Mount("/static", app=StaticFiles(directory=str(STATIC_DIR)), name="static"),
 ]
 

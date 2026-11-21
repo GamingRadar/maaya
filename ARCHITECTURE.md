@@ -64,26 +64,29 @@ MAAYA is an offline-first personal AI assistant and reflective thinking partner 
 - Never commits secrets or personal paths to version control.
 
 ### `app.api`
-- Exposes RESTful HTTP endpoints for chat (`POST /chat`), health checks (`GET /health`), project management, and memory inspection via Starlette routing.
+- Exposes RESTful HTTP endpoints for chat (`POST /chat`), conversations (`POST /conversations`, `GET /conversations`, `GET /conversations/{id}`, `DELETE /conversations/{id}`), health checks (`GET /health`), and static assets via Starlette routing.
 - Implements request validation using Python standard library dataclasses and types.
 - Binds strictly to `127.0.0.1` to prevent unauthorized network access.
 - Handles malformed JSON, empty messages, and payload size bounds cleanly without leaking internal traces.
 
 ### `app.engine` (Inference Subsystem)
-- Abstracts LLM communication behind a clean interface: `GemmaEngine.generate(user_message)`.
+- Abstracts LLM communication behind a clean interface: `GemmaEngine.generate(user_message, history=None)`.
 - **Primary Adapter (`GemmaEngine`):** Executes the Termux-packaged `llama-cli` executable via asynchronous subprocess (`asyncio.create_subprocess_exec`) without `shell=True`.
+- **Multi-Turn Context Prompting:** Injects chronological previous dialogue turns formatted with Gemma turn tags (`<start_of_turn>user`, `<start_of_turn>model`), enabling multi-turn conversational context while bounding history to recent turns (`max_history_turns`).
 - **Concurrency Serialization:** Enforces strict single-process execution using `asyncio.Lock` to ensure multiple concurrent requests cannot exhaust the phone's RAM.
 - **Output Sanitization:** Strips llama.cpp banners, timing stats, echoed prompts, and Gemma turn tokens `<start_of_turn>` / `<end_of_turn>`.
 - **Fault Tolerance:** Robust handling of timeouts, missing binaries, missing models, non-zero exits, and empty responses.
 - Handles parameter translation (context length, temperature, top-p, thread limits).
 
 ### `app.memory` (Persistence & Knowledge Storage)
-- Encapsulates SQLite operations using standard library `sqlite3` (no heavy ORM overhead on mobile).
-- Separates data domains:
-  1. **Conversations:** Chronological chat logs with message metadata.
-  2. **Long-Term Memory:** User-approved facts, preferences, and personal context.
-  3. **Context Assembler:** Synthesizes system prompt, relevant persistent memories, and recent dialogue history within the target context budget (e.g. 2048 tokens).
-- Provides complete CRUD operations for user inspection, editing, and deletion.
+- Encapsulates SQLite operations using Python standard library `sqlite3` (no heavy ORM overhead on mobile).
+- Connection management: connection-per-operation with WAL mode (`PRAGMA journal_mode = WAL`) and foreign key constraints enabled.
+- **Conversations & Messages:**
+  - `conversations` table: stores conversation ID, title, `created_at`, `updated_at`.
+  - `messages` table: stores message ID, `conversation_id`, `role`, `content`, `created_at`, `status`.
+  - Messages cascade on conversation deletion.
+  - Transactions are committed atomically immediately after writing user messages and assistant responses; transactions are never held open across model generation.
+- **Note on Scope:** Phase 5 provides full persistent conversation history. Long-term semantic memory / user-approved facts and vector indexing belong to later phases.
 
 ### `app.projects` (Idea Vault & Planning)
 - Manages discrete user projects, goals, decisions, and related tasks.
